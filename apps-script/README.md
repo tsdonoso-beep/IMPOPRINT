@@ -33,9 +33,21 @@ cd apps-script
 clasp push
 ```
 
-**Opción B — copiar y pegar:** crear cada archivo en el editor de Apps Script
-con el mismo nombre y pegar su contenido. El manifiesto `appsscript.json` se
-pega sobre el que ya existe.
+`.claspignore` deja fuera el arnés de pruebas: sin esa lista, `clasp` subiría
+los `.js` de `test/` al proyecto convertidos en `.gs`.
+
+**Opción B — copiar y pegar:** son 5 archivos si antes se juntan los `.gs` en
+uno solo (en Apps Script comparten el mismo espacio de nombres, así que es
+equivalente):
+
+```bash
+cd apps-script
+cat Config.gs Prompt.gs Parse.gs Consolidar.gs Gemini.gs Drive.gs Hoja.gs Api.gs TestData.gs > /tmp/Codigo.gs
+```
+
+Luego, en el editor: pegar eso en el `.gs` que ya viene creado, agregar los tres
+archivos HTML (+ → HTML, nombrándolos `Index`, `Estilos` y `Cliente`) y pegar
+el manifiesto sobre el `appsscript.json` existente.
 
 ### 3. Obtener una Gemini API Key
 

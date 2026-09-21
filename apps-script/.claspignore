@@ -1,0 +1,7 @@
+# clasp sube todo lo que no esté aquí, y convierte los .js en .gs:
+# sin esta lista, el arnés de pruebas terminaría dentro del proyecto.
+test/**
+README.md
+.claspignore
+.clasp.json
+.clasp.json.ejemplo
