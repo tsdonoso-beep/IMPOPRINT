@@ -240,12 +240,12 @@ las referencias `EXTRACCION!$B$5` funcionan igual en Sheets. El panel de alertas
 
 1. **6 min por ejecución.** Mitigado por diseño: un documento por llamada
    (~10-40 s de Gemini + hasta 2 reintentos de 8 s). Sin riesgo práctico.
-2. **Tiempo total de ejecución diario** ⚠️ *el límite que sí importa*: 90 min/día
-   en cuenta gratuita, 6 h/día en Workspace. Cada llamada a Gemini bloquea la
-   ejecución mientras espera → ≈150-300 documentos/día en cuenta gratuita, ~10×
-   con Workspace. Con volumen alto, conviene Workspace.
-3. **Pantalla "Google no ha verificado esta app"** si se usa con cuentas Gmail
-   personales. Con Workspace y despliegue interno al dominio, no aparece.
+2. ~~**Tiempo total de ejecución diario**~~ **RESUELTO: la organización usa
+   Google Workspace** → 6 h/día de tiempo de ejecución (no los 90 min de una
+   cuenta gratuita). Aun contando 40 s por documento, son más de 500
+   documentos/día, muy por encima del uso real. Riesgo descartado.
+3. ~~**Pantalla "Google no ha verificado esta app"**~~ **RESUELTO:** con
+   Workspace y despliegue interno al dominio (`access: DOMAIN`) no aparece.
 4. **Tamaño de PDF**: `getBytes()` carga a memoria y base64 lo infla ~1.33×.
    Poner guard a ~20 MB y avisar en la lista en vez de fallar.
 5. **La hoja generada se re-escanearía** en una segunda corrida sobre la misma
