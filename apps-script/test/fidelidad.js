@@ -1,8 +1,9 @@
 // Evalúa las fórmulas de la hoja generada y las compara contra el cálculo
 // independiente de src/lib/costeo.ts. Verificación de fidelidad (§9 del plan).
+const vm = require('vm');
 const { construir } = require('./construir');
 
-const { hojas, datos } = construir();
+const { hojas, datos, sandbox } = construir();
 const ERR = { error: true };
 
 const colNum = s => [...s].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0);
@@ -232,6 +233,37 @@ pares.forEach(([n, ref, esp]) => {
 
 console.log('\nPanel de alertas :', celda('COSTEO', 'B49'));
 console.log('EXW USD (prod 1) :', celda('EXTRACCION', 'F18'), '(fórmula de conversión EUR→USD)');
+
+// ---------- el preview debe dar lo mismo que la hoja ----------
+// Es lo que promete la pantalla: "los mismos números que va a tener la hoja".
+console.log('\nPreview en pantalla (Costeo.gs) vs. fórmulas de la hoja');
+console.log('─'.repeat(76));
+
+sandbox.__datos = datos;
+const preview = vm.runInContext('calcularCosteo(__datos)', sandbox);
+
+preview.productos.forEach((p, i) => {
+  const sc = col(10 + i * 2);
+  [
+    ['factor', `D${33 + i}`, p.factor],
+    ['valor total S/', `${sc}43`, p.valorTotalSoles],
+    ['F.I.', `${sc}44`, p.fi],
+    ['costo unitario S/', `${sc}46`, p.costoUnitSoles]
+  ].forEach(([campo, ref, esp]) => {
+    const real = num(celda('COSTEO', ref));
+    const ok = Math.abs(real - esp) < 1e-9;
+    if (!ok) fallos++;
+    console.log(
+      `${p.codigo.padEnd(12)} ${campo.padEnd(19)} ${real.toFixed(6).padStart(15)} ` +
+      `${esp.toFixed(6).padStart(16)}  ${ok ? '✓' : '✗'}`
+    );
+  });
+});
+
+const okGastos = Math.abs(preview.totalGastosUSD - totalGastos) < 1e-9;
+if (!okGastos) fallos++;
+console.log(`total gastos $   ${preview.totalGastosUSD.toFixed(2).padStart(15)} ` +
+  `${totalGastos.toFixed(2).padStart(16)}  ${okGastos ? '✓' : '✗'}`);
 
 console.log('\n' + (fallos === 0 ? '✅ Sin diferencias.' : `❌ ${fallos} diferencia(s).`));
 process.exit(fallos === 0 ? 0 : 1);

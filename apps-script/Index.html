@@ -141,6 +141,20 @@
           <h2>Qué reconoció en cada documento</h2>
           <p class="sub">Los irrelevantes se descartan solos; los que dieron error no entran al costeo.</p>
           <ul class="docs" id="listaClasificacion"></ul>
+          <div class="acciones oculto" id="accionesReintento">
+            <button class="btn btn-suave btn-sm" onclick="reintentarFallidos()">
+              Reintentar los que fallaron
+            </button>
+          </div>
+        </div>
+
+        <div class="hoja" id="cardPreview">
+          <h2>El costeo, antes de crear la hoja</h2>
+          <p class="sub">
+            Los mismos números que va a tener la hoja. Si algo no cuadra, conviene
+            revisarlo acá antes de generarla.
+          </p>
+          <div id="preview"></div>
         </div>
 
         <div class="hoja">

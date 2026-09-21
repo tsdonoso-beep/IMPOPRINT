@@ -95,18 +95,52 @@ function apiProcesarDoc(fileId, nombre) {
 
 // ---------- Costeo ----------
 
+var SIN_PRODUCTOS =
+  'No se encontró ninguna factura comercial con productos. Revisa que la carpeta incluya el invoice del proveedor.';
+
+// Calcula el costeo sin escribir nada: permite ver los números y detectar
+// datos faltantes antes de crear la hoja en Drive.
+function apiPrevisualizar(docsJSON, nombreOC) {
+  try {
+    var docs = JSON.parse(docsJSON || '[]');
+    if (!docs.length) return respuesta({ ok: false, error: 'No hay documentos procesados.' });
+
+    var datos = consolidar(docs, String(nombreOC || 'OC').trim() || 'OC');
+    if (!datos.productos.length) return respuesta({ ok: false, error: SIN_PRODUCTOS });
+
+    var costeo = calcularCosteo(datos);
+
+    return respuesta({
+      ok: true,
+      proveedor: datos.factura.proveedor || '',
+      dua: (datos.dua && datos.dua.numero) || '',
+      moneda: costeo.moneda,
+      tcUsd: costeo.tcUsd,
+      tcEur: costeo.tcEur,
+      totalEXW: costeo.totalEXW,
+      totalGastosUSD: costeo.totalGastosUSD,
+      totalGeneralUSD: costeo.totalGeneralUSD,
+      totalGeneralSoles: costeo.totalGeneralSoles,
+      gastos: costeo.gastos,
+      productos: costeo.productos,
+      // Señales de que la extracción quedó coja: se corrigen en la hoja,
+      // pero conviene verlas antes de generarla.
+      sinTC: !costeo.tcUsd,
+      sinEXW: costeo.productos.filter(function (p) { return !p.exw; }).length,
+      gastosEnCero: (datos.gastos || []).filter(function (g) { return !Number(g.monto); }).length
+    });
+  } catch (e) {
+    return respuesta({ ok: false, error: e.message });
+  }
+}
+
 function apiGenerarCosteo(docsJSON, folderId, nombreOC) {
   try {
     var docs = JSON.parse(docsJSON || '[]');
     if (!docs.length) return respuesta({ ok: false, error: 'No hay documentos procesados.' });
 
     var datos = consolidar(docs, String(nombreOC || 'OC').trim() || 'OC');
-    if (!datos.productos.length) {
-      return respuesta({
-        ok: false,
-        error: 'No se encontró ninguna factura comercial con productos. Revisa que la carpeta incluya el invoice del proveedor.'
-      });
-    }
+    if (!datos.productos.length) return respuesta({ ok: false, error: SIN_PRODUCTOS });
 
     var hoja = construirHoja(datos, folderId);
     return respuesta({

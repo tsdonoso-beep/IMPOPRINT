@@ -6,6 +6,17 @@
 
 var PROP_KEY = 'GEMINI_API_KEY';
 
+// Esperas crecientes entre reintentos (4 intentos, ~50 s en el peor caso).
+var ESPERAS_MS = [5000, 15000, 30000];
+
+// 429 y 503 se parecen en pantalla pero se arreglan distinto: uno es tu cuota,
+// el otro es capacidad de Google.
+function mensajeSaturacion(code) {
+  return code === 429
+    ? 'Límite de tu clave alcanzado (429). Esperá unos minutos o usa otra clave.'
+    : 'Gemini sin capacidad en este momento (503). Reintenta los documentos que fallaron.';
+}
+
 function endpointGemini(modelo, apiKey) {
   return 'https://generativelanguage.googleapis.com/v1beta/models/' +
     modelo + ':generateContent?key=' + encodeURIComponent(apiKey);
@@ -48,8 +59,9 @@ function extraerDocumento(nombre, base64, mimeType, apiKey) {
   var url = endpointGemini(GEMINI_MODELO, apiKey);
   var respText = '';
 
-  // Reintentos ante 429/503 (API saturada), igual que la versión web.
-  for (var intentos = 0; intentos < 3; intentos++) {
+  // Reintentos ante 429/503. La espera crece entre intentos: cuando Gemini
+  // está sin capacidad, volver a golpear a los 8 segundos suele fallar otra vez.
+  for (var intento = 0; intento <= ESPERAS_MS.length; intento++) {
     var res = UrlFetchApp.fetch(url, {
       method: 'post',
       contentType: 'application/json',
@@ -60,8 +72,8 @@ function extraerDocumento(nombre, base64, mimeType, apiKey) {
     var text = res.getContentText();
 
     if (code === 429 || code === 503) {
-      if (intentos >= 2) throw new Error('Error ' + code + ': API saturada. Espera y reintenta.');
-      Utilities.sleep(8000);
+      if (intento === ESPERAS_MS.length) throw new Error(mensajeSaturacion(code));
+      Utilities.sleep(ESPERAS_MS[intento]);
       continue;
     }
     if (code !== 200) {

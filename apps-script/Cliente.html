@@ -289,7 +289,104 @@ function finalizar() {
       '</li>';
   }).join('');
 
+  var fallidos = estado.procesados.filter(function (p) { return p.error; });
+  mostrar('accionesReintento', fallidos.length > 0);
+
   fase(3);
+  previsualizar();
+}
+
+// Vuelve a intentar solo los documentos que fallaron, sin rehacer el lote.
+function reintentarFallidos() {
+  var fallidos = estado.procesados.filter(function (p) { return p.error; });
+  if (!fallidos.length) return;
+
+  // Salen de la lista: los vuelve a agregar el mismo bucle de siempre.
+  estado.procesados = estado.procesados.filter(function (p) { return !p.error; });
+  estado.cancelado = false;
+  fase(2);
+  siguiente(fallidos, 0);
+}
+
+// ---------- preview del costeo ----------
+
+function moneda(n) {
+  return Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function previsualizar() {
+  $('preview').innerHTML = '<p class="sub" style="margin:0">Calculando…</p>';
+  $('btnGenerar').disabled = true;
+
+  var utiles = estado.procesados.filter(function (p) { return p.resultado; });
+
+  google.script.run
+    .withSuccessHandler(function (json) {
+      var d = JSON.parse(json);
+      if (!d.ok) {
+        $('preview').innerHTML = '<div class="aviso aviso-error">' + esc(d.error) + '</div>';
+        return;
+      }
+      $('btnGenerar').disabled = false;
+      pintarPreview(d);
+    })
+    .withFailureHandler(function (err) {
+      $('preview').innerHTML = '<div class="aviso aviso-error">' + esc(err.message) + '</div>';
+    })
+    .apiPrevisualizar(JSON.stringify(utiles), $('inputOC').value);
+}
+
+function pintarPreview(d) {
+  var tarjetas =
+    tarjeta('VALOR EXW $', moneda(d.totalEXW)) +
+    tarjeta('GASTOS $', moneda(d.totalGastosUSD)) +
+    tarjeta('VALOR TOTAL $', moneda(d.totalGeneralUSD), true) +
+    tarjeta('VALOR TOTAL S/', moneda(d.totalGeneralSoles), true);
+
+  var filas = d.productos.map(function (p) {
+    return '<tr>' +
+      '<td class="prod"><b>' + esc(p.codigo || '—') + '</b><small>' + esc(p.nombre) + '</small></td>' +
+      '<td>' + p.cantidad + '</td>' +
+      '<td>' + moneda(p.exw) + '</td>' +
+      '<td>' + (p.factor * 100).toFixed(2) + ' %</td>' +
+      '<td>' + moneda(p.gastosUSD) + '</td>' +
+      '<td class="fuerte">' + moneda(p.valorTotalUSD) + '</td>' +
+      '<td>' + p.fi.toFixed(2) + '</td>' +
+      '<td class="fuerte">' + moneda(p.costoUnitSoles) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  var tabla =
+    '<div class="desborde"><table class="tabla">' +
+    '<tr><th>Producto</th><th>Cant.</th><th>EXW $</th><th>Factor</th><th>Gastos $</th>' +
+    '<th>Valor total $</th><th>F.I.</th><th>Costo unit. S/</th></tr>' +
+    filas + '</table></div>';
+
+  var pie = '<p class="sub" style="margin:14px 0 0">' +
+    esc(d.proveedor || 'Proveedor sin identificar') +
+    (d.dua ? ' · DUA ' + esc(d.dua) : '') +
+    ' · TC ' + (d.tcUsd || '—') +
+    ' · ' + d.gastos + ' gasto(s) incluidos</p>';
+
+  // Lo que conviene mirar antes de generar la hoja.
+  var alertas = [];
+  if (d.sinTC) alertas.push('No se detectó el tipo de cambio de la DUA: los valores en soles salen en 0.');
+  if (d.sinEXW) alertas.push(d.sinEXW + ' producto(s) sin valor EXW: no reciben prorrateo.');
+  if (d.gastosEnCero) alertas.push(d.gastosEnCero + ' gasto(s) quedaron en 0.');
+  if (d.moneda === 'EUR' && !d.tcEur) alertas.push('La factura está en euros y falta el TC EUR.');
+
+  var aviso = alertas.length
+    ? '<div class="aviso aviso-error" style="margin-top:16px">' +
+      alertas.map(esc).join('<br>') +
+      '<br><b>Se corrige en la hoja EXTRACCION y el costeo recalcula solo.</b></div>'
+    : '<div class="aviso aviso-ok" style="margin-top:16px">Datos completos — el costeo se puede generar.</div>';
+
+  $('preview').innerHTML = '<div class="tarjetas">' + tarjetas + '</div>' + tabla + pie + aviso;
+}
+
+function tarjeta(etiqueta, valor, destacada) {
+  return '<div class="tarjeta' + (destacada ? ' destacada' : '') + '">' +
+    '<span>' + etiqueta + '</span><b>' + valor + '</b></div>';
 }
 
 // ---------- fase 3: generar la hoja ----------
@@ -332,7 +429,9 @@ function reiniciar() {
   aviso('msgCosteo', '', '');
   mostrar('cardDocs', false);
   mostrar('cardCarpeta', false);
+  mostrar('accionesReintento', false);
   mostrar('cardZona', true);
+  $('preview').innerHTML = '';
   fase(1);
 }
 

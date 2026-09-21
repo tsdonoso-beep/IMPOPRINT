@@ -5,7 +5,7 @@ const path = require('path');
 const vm = require('vm');
 
 const DIR = path.join(__dirname, '..');
-const ARCHIVOS = ['Config.gs', 'Parse.gs', 'Consolidar.gs', 'Hoja.gs', 'TestData.gs'];
+const ARCHIVOS = ['Config.gs', 'Parse.gs', 'Consolidar.gs', 'Costeo.gs', 'Hoja.gs', 'TestData.gs'];
 
 class FakeRange {
   constructor(sheet, f, c, nf, nc) { Object.assign(this, { sheet, f, c, nf, nc }); }
@@ -111,7 +111,7 @@ function construir(datosPersonalizados) {
 
   const hojas = {};
   ultimoSS.getSheets().forEach(h => { hojas[h.nombre] = h.grid; });
-  return { hojas, datos, sheets: ultimoSS.getSheets() };
+  return { hojas, datos, sheets: ultimoSS.getSheets(), sandbox };
 }
 
 module.exports = { construir };
