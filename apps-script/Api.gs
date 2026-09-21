@@ -95,8 +95,31 @@ function apiProcesarDoc(fileId, nombre) {
 
 // ---------- Costeo ----------
 
-var SIN_PRODUCTOS =
-  'No se encontró ninguna factura comercial con productos. Revisa que la carpeta incluya el invoice del proveedor.';
+// Sin factura comercial no hay EXW que prorratear, y por lo tanto no hay
+// costeo. El mensaje enumera lo que sí se leyó: decir solo "falta la factura"
+// se confunde con que la lectura falló, cuando en general el documento se
+// leyó bien y simplemente no era una factura.
+function mensajeSinProductos(docs) {
+  var conteo = { FACTURA_COMERCIAL: 0, DUA: 0, GASTO: 0, IRRELEVANTE: 0 };
+  for (var i = 0; i < docs.length; i++) {
+    var tipo = docs[i].resultado && docs[i].resultado.tipo;
+    if (conteo[tipo] !== undefined) conteo[tipo] += 1;
+  }
+
+  if (conteo.FACTURA_COMERCIAL) {
+    return 'Se reconoció una factura comercial, pero no se pudo extraer ningún producto con su valor EXW. ' +
+      'Revisa que el detalle de productos se lea con claridad en el PDF.';
+  }
+
+  var partes = [];
+  if (conteo.DUA) partes.push(conteo.DUA + ' DUA');
+  if (conteo.GASTO) partes.push(conteo.GASTO + ' de gastos');
+  if (conteo.IRRELEVANTE) partes.push(conteo.IRRELEVANTE + ' irrelevante(s)');
+
+  return 'Se leyeron ' + docs.length + ' documento(s) —' + (partes.join(', ') || 'ninguno aprovechable') +
+    '— y ninguno es la factura comercial del proveedor. Sin ella no hay valor EXW que prorratear. ' +
+    'Ojo: una cotización, una OC o una PO internas no sirven para costear.';
+}
 
 // Calcula el costeo sin escribir nada: permite ver los números y detectar
 // datos faltantes antes de crear la hoja en Drive.
@@ -106,7 +129,7 @@ function apiPrevisualizar(docsJSON, nombreOC) {
     if (!docs.length) return respuesta({ ok: false, error: 'No hay documentos procesados.' });
 
     var datos = consolidar(docs, String(nombreOC || 'OC').trim() || 'OC');
-    if (!datos.productos.length) return respuesta({ ok: false, error: SIN_PRODUCTOS });
+    if (!datos.productos.length) return respuesta({ ok: false, error: mensajeSinProductos(docs) });
 
     var costeo = calcularCosteo(datos);
 
@@ -140,7 +163,7 @@ function apiGenerarCosteo(docsJSON, folderId, nombreOC) {
     if (!docs.length) return respuesta({ ok: false, error: 'No hay documentos procesados.' });
 
     var datos = consolidar(docs, String(nombreOC || 'OC').trim() || 'OC');
-    if (!datos.productos.length) return respuesta({ ok: false, error: SIN_PRODUCTOS });
+    if (!datos.productos.length) return respuesta({ ok: false, error: mensajeSinProductos(docs) });
 
     var hoja = construirHoja(datos, folderId);
     return respuesta({
