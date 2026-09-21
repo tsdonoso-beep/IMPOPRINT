@@ -1,9 +1,14 @@
 <style>
   /* Identidad INROPRIN — azul #036EB1 · rojo #E30613 · teal #01A298 */
   :root {
+    /* Mismas familias que InroScan: Sora para títulos, DM Sans para el resto. */
+    --display: Sora, "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    --texto: "DM Sans", Sora, ui-sans-serif, system-ui, sans-serif;
+    --mono: "DM Mono", ui-monospace, monospace;
+
     --surface: #ffffff;
     --lienzo: #eef1f4;
-    --ink: #17202a;
+    --ink: #101a24;
     --ink-2: #44505c;
     --ink-soft: #7b8794;
     --line: #e4e8ec;
@@ -24,9 +29,13 @@
     margin: 0;
     background: var(--surface);
     color: var(--ink);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--texto);
     -webkit-font-smoothing: antialiased;
     font-size: 14px;
+  }
+
+  h1, h2, h3, .producto b, .nav-sec, .zona h3, .recorrido b, .panel h3 {
+    font-family: var(--display);
   }
 
   .app { display: flex; min-height: 100vh; align-items: stretch; }
@@ -94,17 +103,17 @@
   .clave b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
   .clave em {
     display: block; font-style: normal; margin-top: 2px;
-    font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--ink-soft);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
   }
   .clave.lista em { color: var(--accent); }
   .clave svg { width: 17px; height: 17px; flex: none; stroke: var(--ink-soft); fill: none; stroke-width: 1.7; }
-  .mail { margin: 13px 0 0; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--ink-soft); }
+  .mail { margin: 13px 0 0; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); }
 
   /* ══════════ CONTENIDO ══════════ */
   main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .encabezado { padding: 26px 34px 20px; }
-  .encabezado h1 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: -.02em; }
-  .encabezado p { margin: 6px 0 0; font-size: 14.5px; color: var(--ink-soft); }
+  .encabezado h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+  .encabezado p { margin: 5px 0 0; font-size: 14px; color: var(--ink-soft); }
 
   .lienzo { flex: 1; background: var(--lienzo); padding: 26px 34px 44px; }
   .hoja {
