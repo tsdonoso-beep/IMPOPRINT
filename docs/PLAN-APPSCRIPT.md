@@ -264,32 +264,55 @@ La regresión actual compara el `.xlsx` generado contra un Excel de referencia a
 nivel binario. Eso **no aplica** a una hoja nativa de Google: hay que redefinirla
 como fidelidad *funcional*.
 
-Plan: copiar el dataset OC 579-2025 de `scripts/test-excel.ts:7-41` (3 productos,
-12 gastos, TC 3.85) a `TestData.gs` con una función `testCosteoDemo()` que
-genere la hoja desde ese mismo dataset. Criterio de aceptación, comparando
-contra `/tmp/generado_ts.xlsx` (`npm run test:excel`):
+Se resolvió con un arnés en Node (`apps-script/test/`) que ejecuta los `.gs`
+con los servicios de Google simulados, evalúa las fórmulas de la hoja resultante
+y las compara contra el cálculo independiente de `src/lib/costeo.ts`.
 
-- mismos valores de F.I., costo unitario, % importación y totales por producto;
-- mismas fórmulas en las celdas clave (factor, prorrateo, VALOR TOTAL, bloque
-  IMPORTACIONES);
-- mismo layout de filas/columnas y mismo panel de alertas;
-- semáforo de EXTRACCION coherente (rojo/verde/amarillo).
+```bash
+npm run test:hoja
+```
+
+- **`fidelidad.js`** — dataset OC 579-2025 (el mismo de `scripts/test-excel.ts`):
+  compara factor, EXW en soles, valor total, F.I., costo unitario, %
+  importación y totales. Resultado actual: **cero diferencias**.
+- **`limites.js`** — casos límite: factura en EUR (y que corregir el TC
+  recalcule), datos faltantes, gasto desmarcado, diez productos (la hoja debe
+  ampliarse más allá de la columna Z) y carpeta sin gastos.
+
+Conviene correrlo después de cualquier cambio en `Hoja.gs`. Lo que el arnés
+**no** cubre y hay que mirar a ojo la primera vez: colores, anchos de columna,
+bordes y celdas combinadas.
 
 ---
 
 ## 10. Fases
 
-| Fase | Alcance | Hecho cuando… |
+| Fase | Alcance | Estado |
 |---|---|---|
-| **F0** | Manifest, `doGet`, `Index.html` mínimo, despliegue | el web app abre con la cuenta del usuario |
-| **F1** | API Key: `UserProperties`, guardar / probar / estado + `Gemini.gs` | "Probar conexión" responde OK contra Gemini |
-| **F2** | `Drive.gs`: pegar enlace → listar archivos con filtro por nombre | la lista muestra los PDFs con SKIP/FORCE ya aplicado |
-| **F3** | `Prompt.gs`, `Parse.gs`, `apiProcesarDoc` + bucle cliente | los N documentos se procesan con progreso, pausa y cancelar |
-| **F4** | `Hoja.gs` (escritor + 2 hojas) + `Consolidar.gs` + guardar en carpeta | la hoja aparece en la carpeta origen y COSTEO recalcula al editar EXTRACCION |
-| **F5** | Checkbox INCLUIR, EUR por fórmula, guards de tamaño, nombres, pulido | §5 y §8 resueltos |
+| **F0** | Manifest, `doGet`, `Index.html`, despliegue | ✅ código listo — falta desplegar (pasos en `apps-script/README.md`) |
+| **F1** | API Key: `UserProperties`, guardar / probar / estado + `Gemini.gs` | ✅ |
+| **F2** | `Drive.gs`: pegar enlace → listar archivos con filtro por nombre | ✅ |
+| **F3** | `Prompt.gs`, `Parse.gs`, `apiProcesarDoc` + bucle cliente | ✅ |
+| **F4** | `Hoja.gs` (escritor + 2 hojas) + `Consolidar.gs` + guardar en carpeta | ✅ verificado con `npm run test:hoja` |
+| **F5** | Checkbox INCLUIR, EUR por fórmula, guards de tamaño, nombres, pulido | ✅ |
 
-**F4 es aproximadamente la mitad del esfuerzo total.** F0-F3 son en su mayoría
-código ya escrito que se traslada.
+Lo único que queda es lo que no se puede hacer desde el repo: crear el proyecto
+de Apps Script, subir el código y desplegar (§ `apps-script/README.md`), y
+después validar contra una OC real.
+
+### Defectos encontrados al verificar
+
+El arnés de pruebas (§9) destapó dos fallos que venían heredados de
+`src/lib/excel.ts` y que en la hoja se corrigieron:
+
+1. **Referencia circular sin gastos.** Con cero gastos, `GEND` queda por encima
+   de `GST` y el total salía como `SUM(K16:K15)`. Sheets normaliza el rango
+   invertido a `K15:K16`, que incluye la propia celda del total → referencia
+   circular. Ahora el total es `0` cuando no hay gastos.
+2. **El panel de alertas nunca contaba EXW faltantes.** Miraba la celda de
+   COSTEO, que ya pasa por `IF(ISNUMBER(...),...,0)` y por lo tanto siempre es
+   numérica. Ahora mira la celda de EXTRACCION, que es donde el dato falta de
+   verdad.
 
 ---
 

@@ -1,0 +1,283 @@
+<script>
+// ============================================================
+// Orquestación del lado del cliente — port de src/app/page.tsx.
+// El estado vive en el navegador y el servidor es sin estado:
+// un documento por llamada, con la pausa anti-429 aquí (así no
+// consume tiempo de ejecución de Apps Script).
+// ============================================================
+
+var estado = {
+  folderId: '',
+  folderNombre: '',
+  archivos: [],
+  procesados: [],
+  cancelado: false,
+  pausaMs: 2500,
+  maxMB: 20,
+  tieneKey: false
+};
+
+var TIPO_LABEL = {
+  FACTURA_COMERCIAL: '🧾 Factura',
+  DUA: '📋 DUA',
+  GASTO: '💰 Gasto',
+  IRRELEVANTE: '⏭ Irrelevante'
+};
+
+// ---------- utilidades ----------
+
+function $(id) { return document.getElementById(id); }
+
+// Los nombres vienen de Drive: se escapan antes de inyectarlos en el DOM.
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function mostrar(id, visible) { $(id).classList.toggle('oculto', !visible); }
+
+function aviso(contenedor, texto, tipo) {
+  $(contenedor).innerHTML = texto
+    ? '<div class="aviso aviso-' + tipo + '">' + esc(texto) + '</div>'
+    : '';
+}
+
+function fase(n) {
+  mostrar('faseCarpeta', n === 1);
+  mostrar('faseProceso', n === 2);
+  mostrar('faseResultado', n === 3);
+  [1, 2, 3].forEach(function (i) {
+    var li = $('p' + i);
+    li.className = i === n ? 'paso-on' : (i < n ? 'paso-ok' : '');
+    li.querySelector('.num').textContent = i < n ? '✓' : i;
+  });
+}
+
+// ---------- API Key ----------
+
+function togglePanel() { $('panelKey').classList.toggle('oculto'); }
+
+function pintarEstadoKey(d) {
+  estado.tieneKey = d.tieneKey;
+  estado.pausaMs = d.pausaMs || 2500;
+  estado.maxMB = d.maxMB || 20;
+  $('btnKey').textContent = d.tieneKey ? '⚙ API Key · ' + d.keyMask : '⚙ API Key · sin configurar';
+  $('notaPausa').textContent =
+    'Pausa de ' + (estado.pausaMs / 1000).toFixed(1) + ' s entre documentos para no saturar el límite de Gemini. Puedes cancelar cuando quieras.';
+}
+
+function guardarKey() {
+  var val = $('inputKey').value.trim();
+  if (!val) return;
+  if (val.indexOf('AIza') !== 0 && !confirm('La key no empieza con "AIza". ¿Guardar igual?')) return;
+  google.script.run.withSuccessHandler(function (json) {
+    var d = JSON.parse(json);
+    if (!d.ok) return aviso('msgKey', d.error, 'error');
+    aviso('msgKey', 'Key guardada.', 'ok');
+    $('inputKey').value = '';
+    cargarEstado();
+  }).apiGuardarKey(val);
+}
+
+function borrarKey() {
+  google.script.run.withSuccessHandler(function () {
+    aviso('msgKey', '', '');
+    cargarEstado();
+  }).apiBorrarKey();
+}
+
+function probarKey() {
+  aviso('msgKey', 'Probando…', 'ok');
+  google.script.run.withSuccessHandler(function (json) {
+    var d = JSON.parse(json);
+    aviso('msgKey', d.ok ? '✅ Conexión OK — ' + d.modelo : '❌ ' + d.error, d.ok ? 'ok' : 'error');
+  }).apiProbarKey();
+}
+
+function cargarEstado() {
+  google.script.run.withSuccessHandler(function (json) {
+    pintarEstadoKey(JSON.parse(json));
+  }).apiEstado();
+}
+
+// ---------- Fase 1: escanear la carpeta ----------
+
+function escanear() {
+  var url = $('inputCarpeta').value.trim();
+  if (!url) return aviso('msgCarpeta', 'Pega el enlace de la carpeta.', 'error');
+
+  $('btnEscanear').disabled = true;
+  aviso('msgCarpeta', 'Leyendo la carpeta…', 'ok');
+
+  google.script.run
+    .withSuccessHandler(function (json) {
+      $('btnEscanear').disabled = false;
+      var d = JSON.parse(json);
+      if (!d.ok) return aviso('msgCarpeta', d.error, 'error');
+
+      estado.folderId = d.folderId;
+      estado.folderNombre = d.folderNombre;
+      estado.archivos = d.archivos;
+      aviso('msgCarpeta', '', '');
+
+      if (!d.archivos.length) {
+        return aviso('msgCarpeta', 'La carpeta no tiene PDFs ni imágenes para procesar.', 'error');
+      }
+      if (!$('inputOC').value.trim()) $('inputOC').value = d.folderNombre;
+      pintarDocs();
+      mostrar('cardDocs', true);
+    })
+    .withFailureHandler(function (err) {
+      $('btnEscanear').disabled = false;
+      aviso('msgCarpeta', err.message, 'error');
+    })
+    .apiListarCarpeta(url);
+}
+
+function pintarDocs() {
+  var incluidos = estado.archivos.filter(function (a) { return a.incluido; }).length;
+  $('tituloDocs').textContent = estado.folderNombre;
+  $('subDocs').innerHTML = '<b>' + incluidos + '</b> de ' + estado.archivos.length + ' documento(s) se procesarán.';
+
+  $('listaDocs').innerHTML = estado.archivos.map(function (a, i) {
+    var etiqueta = '';
+    if (a.pesado) etiqueta = '<span class="chip chip-warn">supera ' + estado.maxMB + ' MB</span>';
+    else if (a.motivo === 'skip') etiqueta = '<span class="chip chip-skip">saltado por nombre</span>';
+    else if (a.motivo === 'force') etiqueta = '<span class="chip chip-force">relevante</span>';
+
+    return '<li>' +
+      '<input type="checkbox" ' + (a.incluido ? 'checked' : '') + (a.pesado ? ' disabled' : '') +
+        ' onchange="alternar(' + i + ')">' +
+      '<span class="nom">' + esc(a.nombre) + ' <span class="kb">· ' + a.tamanoKB + ' KB</span></span>' +
+      etiqueta +
+      '</li>';
+  }).join('');
+
+  $('btnProcesar').disabled = incluidos === 0;
+  $('btnProcesar').textContent = 'Procesar ' + incluidos + ' documento(s) con Gemini';
+}
+
+function alternar(i) {
+  estado.archivos[i].incluido = !estado.archivos[i].incluido;
+  pintarDocs();
+}
+
+// ---------- Fase 2: extracción ----------
+
+function procesar() {
+  if (!estado.tieneKey) {
+    togglePanel();
+    return aviso('msgKey', 'Primero configura tu Gemini API Key.', 'error');
+  }
+  var pendientes = estado.archivos.filter(function (a) { return a.incluido; });
+  if (!pendientes.length) return;
+
+  estado.cancelado = false;
+  estado.procesados = [];
+  fase(2);
+  siguiente(pendientes, 0);
+}
+
+function siguiente(pendientes, i) {
+  if (estado.cancelado || i >= pendientes.length) return finalizar();
+
+  var doc = pendientes[i];
+  $('progresoTitulo').textContent = 'Procesando ' + (i + 1) + ' de ' + pendientes.length;
+  $('progresoActual').textContent = doc.nombre;
+  $('barraFill').style.width = ((i / pendientes.length) * 100) + '%';
+
+  var continuar = function () {
+    if (estado.cancelado) return finalizar();
+    // Pausa anti-429 entre documentos, no antes del primero.
+    setTimeout(function () { siguiente(pendientes, i + 1); }, estado.pausaMs);
+  };
+
+  google.script.run
+    .withSuccessHandler(function (json) {
+      var d = JSON.parse(json);
+      estado.procesados.push({
+        id: doc.id,
+        nombre: doc.nombre,
+        incluido: true,
+        resultado: d.ok ? d.resultado : null,
+        error: d.ok ? '' : d.error
+      });
+      continuar();
+    })
+    .withFailureHandler(function (err) {
+      estado.procesados.push({
+        id: doc.id, nombre: doc.nombre, incluido: true, resultado: null, error: err.message
+      });
+      continuar();
+    })
+    .apiProcesarDoc(doc.id, doc.nombre);
+}
+
+function cancelar() { estado.cancelado = true; }
+
+function finalizar() {
+  $('barraFill').style.width = '100%';
+  if (!estado.procesados.length) return fase(1);
+
+  $('listaClasificacion').innerHTML = estado.procesados.map(function (p) {
+    var chip = p.error
+      ? '<span class="chip chip-bad">⚠ Error</span>'
+      : '<span class="chip chip-neutro">' + (TIPO_LABEL[p.resultado.tipo] || p.resultado.tipo) + '</span>';
+    return '<li>' + chip +
+      '<span class="nom">' + esc(p.nombre) + '</span>' +
+      (p.error ? '<span class="kb" style="color:var(--bad)">' + esc(p.error) + '</span>' : '') +
+      '</li>';
+  }).join('');
+
+  fase(3);
+}
+
+// ---------- Fase 3: generar la hoja ----------
+
+function generar() {
+  $('btnGenerar').disabled = true;
+  aviso('msgCosteo', 'Construyendo la hoja…', 'ok');
+
+  var utiles = estado.procesados.filter(function (p) { return p.resultado; });
+
+  google.script.run
+    .withSuccessHandler(function (json) {
+      $('btnGenerar').disabled = false;
+      var d = JSON.parse(json);
+      if (!d.ok) return aviso('msgCosteo', d.error, 'error');
+
+      $('msgCosteo').innerHTML =
+        '<div class="aviso aviso-ok">' +
+        '✅ <b>' + esc(d.nombre) + '</b> — ' + d.productos + ' producto(s), ' + d.gastos + ' gasto(s).<br>' +
+        'Guardada en la carpeta de la OC. ' +
+        '<a href="' + esc(d.url) + '" target="_blank"><b>Abrir la hoja →</b></a>' +
+        '</div>';
+    })
+    .withFailureHandler(function (err) {
+      $('btnGenerar').disabled = false;
+      aviso('msgCosteo', err.message, 'error');
+    })
+    .apiGenerarCosteo(JSON.stringify(utiles), estado.folderId, $('inputOC').value);
+}
+
+// ---------- reinicio ----------
+
+function reiniciar() {
+  estado.archivos = [];
+  estado.procesados = [];
+  estado.cancelado = false;
+  $('inputCarpeta').value = '';
+  $('inputOC').value = '';
+  $('listaDocs').innerHTML = '';
+  aviso('msgCarpeta', '', '');
+  aviso('msgCosteo', '', '');
+  mostrar('cardDocs', false);
+  fase(1);
+}
+
+// ---------- arranque ----------
+
+fase(1);
+cargarEstado();
+</script>

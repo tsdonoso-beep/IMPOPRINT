@@ -71,6 +71,31 @@ compara el resultado de la app contra el costeo conocido.
 
 ---
 
+## Archivos
+
+| Archivo | Rol |
+|---|---|
+| `Api.gs` | `doGet` + funciones que consume la interfaz (`google.script.run`) |
+| `Drive.gs` | Lee la carpeta de la OC y guarda la hoja generada en ella |
+| `Gemini.gs` | Llamada a Gemini y la API Key por usuario |
+| `Prompt.gs` | Prompt maestro de clasificación y extracción |
+| `Parse.gs` | Normaliza la respuesta de Gemini |
+| `Consolidar.gs` | Filtro por nombre y consolidación de la OC |
+| `Hoja.gs` | Escritor bufferizado + las hojas EXTRACCION y COSTEO |
+| `Config.gs` | Modelo, filtros por nombre, paleta y formatos |
+| `Index/Estilos/Cliente.html` | Interfaz y orquestación del navegador |
+| `TestData.gs` | Dataset OC 579-2025 y `testCosteoDemo()` |
+
+## Verificación
+
+```bash
+npm run test:hoja
+```
+
+Ejecuta los `.gs` en Node con los servicios de Google simulados, evalúa las
+fórmulas de la hoja y las compara contra el cálculo de `src/lib/costeo.ts`.
+Correrlo después de tocar `Hoja.gs`.
+
 ## Volver a desplegar tras un cambio
 
 Un `clasp push` actualiza el código, pero **no** la implementación que usa la
