@@ -19,7 +19,7 @@ function esDocumentoProcesable(mimeType) {
     mimeType === 'image/png';
 }
 
-// Lista los archivos de la carpeta aplicando el filtro por nombre.
+// Lista los documentos de la carpeta y de todas sus subcarpetas.
 // Los Google Docs/Sheets nativos quedan fuera: así un costeo generado en una
 // corrida anterior no se re-escanea como si fuera un documento de la OC.
 function listarCarpeta(urlOId) {
@@ -31,21 +31,54 @@ function listarCarpeta(urlOId) {
     throw new Error('No se pudo abrir la carpeta. Verifica el enlace y que tengas acceso.');
   }
 
-  var archivos = [];
-  var it = carpeta.getFiles();
-  while (it.hasNext()) {
-    var f = it.next();
+  var acum = { archivos: [], vistas: {}, subcarpetas: 0, truncado: false };
+  recorrerCarpeta(carpeta, '', 0, acum);
+
+  // Los iteradores de Drive no garantizan orden: se ordena por ruta y nombre
+  // para que cada corrida procese los documentos en la misma secuencia.
+  acum.archivos.sort(function (a, b) {
+    return a.ruta.localeCompare(b.ruta) || a.nombre.localeCompare(b.nombre);
+  });
+
+  return {
+    folderId: folderId,
+    folderNombre: carpeta.getName(),
+    subcarpetas: acum.subcarpetas,
+    truncado: acum.truncado,
+    archivos: acum.archivos
+  };
+}
+
+// Recorre la carpeta en profundidad. `ruta` es la ubicación relativa que se
+// muestra en la lista para saber de dónde salió cada documento.
+function recorrerCarpeta(carpeta, ruta, nivel, acum) {
+  // Un atajo de Drive puede apuntar a una carpeta ya visitada (incluso a una
+  // ancestra): sin este registro, el recorrido giraría en redondo.
+  var id = carpeta.getId();
+  if (acum.vistas[id]) return;
+  acum.vistas[id] = true;
+
+  var archivos = carpeta.getFiles();
+  while (archivos.hasNext()) {
+    if (acum.archivos.length >= MAX_ARCHIVOS) {
+      acum.truncado = true;
+      return;
+    }
+    var f = archivos.next();
     var mime = f.getMimeType();
     if (!esDocumentoProcesable(mime)) continue;
 
     var nombre = f.getName();
     var kb = Math.round(f.getSize() / 1024);
-    var motivo = clasificarPorNombre(nombre);
     var pesado = kb > MAX_MB * 1024;
+    // El filtro mira la ruta completa: una subcarpeta "COTIZACIONES" descarta
+    // lo que tiene dentro aunque los archivos se llamen de cualquier manera.
+    var motivo = clasificarPorNombre(ruta ? ruta + '/' + nombre : nombre);
 
-    archivos.push({
+    acum.archivos.push({
       id: f.getId(),
       nombre: nombre,
+      ruta: ruta,
       tamanoKB: kb,
       mimeType: mime,
       motivo: motivo,
@@ -55,15 +88,21 @@ function listarCarpeta(urlOId) {
     });
   }
 
-  // getFiles() no garantiza orden: se ordena por nombre para que cada corrida
-  // procese los documentos en la misma secuencia.
-  archivos.sort(function (a, b) { return a.nombre.localeCompare(b.nombre); });
-
-  return {
-    folderId: folderId,
-    folderNombre: carpeta.getName(),
-    archivos: archivos
-  };
+  var subcarpetas = carpeta.getFolders();
+  while (subcarpetas.hasNext()) {
+    var sub = subcarpetas.next();
+    if (nivel + 1 > MAX_NIVELES) {
+      acum.truncado = true;
+      continue;
+    }
+    acum.subcarpetas += 1;
+    var nombreSub = sub.getName();
+    recorrerCarpeta(sub, ruta ? ruta + '/' + nombreSub : nombreSub, nivel + 1, acum);
+    if (acum.archivos.length >= MAX_ARCHIVOS) {
+      acum.truncado = true;
+      return;
+    }
+  }
 }
 
 function leerBase64(fileId) {

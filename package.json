@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:excel": "tsx scripts/test-excel.ts",
-    "test:hoja": "node apps-script/test/fidelidad.js && node apps-script/test/limites.js"
+    "test:hoja": "node apps-script/test/fidelidad.js && node apps-script/test/limites.js && node apps-script/test/carpetas.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

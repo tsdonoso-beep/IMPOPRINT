@@ -10,6 +10,12 @@ var PAUSA_MS = 2500;
 // Tamaño máximo de PDF que se manda a Gemini (base64 infla ~1.33x).
 var MAX_MB = 20;
 
+// Hasta dónde baja el escaneo de subcarpetas, y cuántos documentos como
+// máximo se listan. Son topes de cordura: sin ellos, un enlace a una unidad
+// entera dejaría la exploración corriendo hasta agotar el tiempo de ejecución.
+var MAX_NIVELES = 5;
+var MAX_ARCHIVOS = 300;
+
 // Nombres que, si aparecen, hacen que el documento se salte por defecto.
 var SKIP_NOMBRES = [
   'swift',

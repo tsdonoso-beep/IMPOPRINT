@@ -166,7 +166,13 @@ function escanear() {
 
       // La carpeta ya cumplió su papel: se repliega para que la lista mande.
       $('resNombre').textContent = d.folderNombre;
-      $('resDetalle').textContent = d.archivos.length + ' documento(s) encontrados';
+      $('resDetalle').textContent = d.archivos.length + ' documento(s)' +
+        (d.subcarpetas ? ' en ' + d.subcarpetas + ' subcarpeta(s)' : '') + ' encontrados';
+
+      if (d.truncado) {
+        aviso('msgCarpeta', 'La carpeta es muy grande: se listaron los primeros ' +
+          d.archivos.length + ' documentos. Apunta a una subcarpeta más acotada si falta alguno.', 'error');
+      }
       mostrar('cardZona', false);
       mostrar('cardCarpeta', true);
 
@@ -191,10 +197,12 @@ function pintarDocs() {
     else if (a.motivo === 'skip') etiqueta = '<span class="chip chip-skip">saltado por nombre</span>';
     else if (a.motivo === 'force') etiqueta = '<span class="chip chip-force">relevante</span>';
 
+    var ruta = a.ruta ? '<span class="ruta">' + esc(a.ruta) + ' / </span>' : '';
+
     return '<li>' +
       '<input type="checkbox" ' + (a.incluido ? 'checked' : '') + (a.pesado ? ' disabled' : '') +
         ' onchange="alternar(' + i + ')">' +
-      '<span class="nom">' + esc(a.nombre) + '</span>' +
+      '<span class="nom">' + ruta + esc(a.nombre) + '</span>' +
       '<span class="kb">' + peso(a.tamanoKB) + '</span>' +
       etiqueta +
       '</li>';
