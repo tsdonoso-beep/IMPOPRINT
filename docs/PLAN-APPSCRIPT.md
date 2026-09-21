@@ -295,12 +295,58 @@ código ya escrito que se traslada.
 
 ## 11. Decisiones abiertas
 
-| # | Decisión | Recomendación |
+| # | Decisión | Estado |
 |---|---|---|
-| 1 | ¿Hoja nativa de Google o también copia `.xlsx`? | Nativa en v1; el `.xlsx` sale con "Descargar como" cuando haga falta |
+| 1 | Formato de salida | **DECIDIDO: solo hoja nativa de Google.** Se descarta el `.xlsx` por completo — no se genera ni se ofrece |
 | 2 | Nombre del archivo de salida | `COSTEO <OC> <AAAA-MM-DD>` — no pisa corridas anteriores |
-| 3 | ¿Sobrescribir un costeo existente o versionar? | Versionar (fecha en el nombre); nunca borrar |
+| 3 | ¿Sobrescribir un costeo existente o versionar? | **DECIDIDO: versionar** (fecha en el nombre); nunca borrar ni sobrescribir |
 | 4 | Conversión EUR | Por fórmula en la hoja (§5a) |
 | 5 | Exclusión de gastos | Checkbox nativo en EXTRACCION (§5b) |
 | 6 | Cómo se publica el código | Los archivos viven en este repo; se suben con `clasp push` o copiando al editor |
-| 7 | ¿Se retira la app Next.js? | Mantenerla mientras F0-F5 no esté validado; retirarla después |
+| 7 | ¿Se retira la app Next.js / GitHub Pages? | **DECIDIDO: sí, pero después.** Conviven hasta que F0-F5 esté operativo y validado en producción; recién ahí se retira |
+| 8 | Pre-extracción de texto antes de la IA | **DECIDIDO: no** (evaluado en §12) |
+
+---
+
+## 12. Pre-extracción de texto antes de Gemini (evaluado y descartado)
+
+Pregunta planteada: ¿conviene detectar si el PDF tiene texto y extraerlo antes
+de llamar a la IA, por eficiencia de tokens?
+
+**Contexto técnico.** Apps Script corre sobre V8: **no hay Python, ni pip, ni
+npm**. Una "librería" en Apps Script es otro proyecto de Apps Script o
+JavaScript puro pegado en el proyecto. La única vía nativa de extracción de
+texto es convertir el PDF a Documento de Google con el servicio avanzado de
+Drive (hace OCR si el PDF es escaneado) y leer el texto resultante.
+
+**Estado actual:** no existe tal paso. `UploadZone.tsx:19` lee el PDF, lo pasa a
+base64 y `gemini-client.ts:41` lo manda entero como `inlineData`. El único
+filtro previo es por nombre de archivo (`config.ts:12-48`).
+
+**Veredicto: no implementarlo.** Tres razones:
+
+1. **El ahorro de tokens es ilusorio.** Gemini factura un PDF a un costo fijo por
+   página (del orden de 200-300 tokens). Una página densa de factura, convertida
+   a texto plano, cuesta lo mismo o más. En documentos densos el cambio es
+   neutro o negativo.
+2. **Degrada la extracción.** Facturas y DUA son tablas, y la posición de las
+   columnas *es* información. El PDF nativo le entrega el layout al modelo; el
+   texto plano lo aplasta y obliga a inferir qué monto corresponde a qué
+   concepto. Se pagaría parecido por un input peor.
+3. **No ataca el cuello de botella real.** El límite operativo es RPD/RPM de
+   Gemini (500 requests/día), que es **por request, no por token**: extraer
+   texto antes no elimina ni una llamada. Y agrega una llamada a Drive por
+   documento, que consume el recurso más escaso de Apps Script — la cuota de
+   tiempo de ejecución diario (§8.2).
+
+**Dónde sí está la eficiencia**, y ya está en el plan:
+
+- el filtro por nombre (`clasificarPorNombre`), que evita la llamada completa,
+  no solo los tokens;
+- el guard por tamaño (§8.4), que impide que un catálogo de decenas de páginas
+  se coma el presupuesto de una corrida;
+- `maxOutputTokens: 4096`, ya configurado.
+
+Si en el futuro se quiere reabrir: hacerlo como experimento A/B sobre documentos
+reales del área, midiendo *tokens y precisión de extracción* en ambas rutas,
+nunca como suposición.
