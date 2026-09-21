@@ -27,12 +27,16 @@ function respuesta(obj) {
 
 function apiEstado() {
   var key = obtenerApiKey();
+  var correo = '';
+  // Solo se muestra para dejar claro de qué cuenta es la clave en uso.
+  try { correo = Session.getActiveUser().getEmail(); } catch (e) { correo = ''; }
   return respuesta({
     tieneKey: !!key,
     keyMask: enmascararKey(key),
     modelo: GEMINI_MODELO,
     pausaMs: PAUSA_MS,
-    maxMB: MAX_MB
+    maxMB: MAX_MB,
+    usuario: correo
   });
 }
 

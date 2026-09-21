@@ -7,117 +7,208 @@
 </head>
 <body>
 
-<header>
-  <div class="bar">
-    <div class="marca">
-      <div class="logo">IR</div>
-      <div>
-        <b>INROPRIN</b>
-        <span>Costeo de Importaciones</span>
-      </div>
-    </div>
-    <button id="btnKey" class="btn btn-ghost btn-sm" onclick="togglePanel()">⚙ API Key</button>
-  </div>
-</header>
+<div class="app">
 
-<!-- Panel de API Key -->
-<div id="panelKey" class="panel oculto">
-  <h3>Configurar Gemini API Key</h3>
+  <!-- ══════════ BARRA LATERAL ══════════ -->
+  <aside>
+    <div class="marca">
+      <?!= include('Logo'); ?>
+      <span>Industrias<br><b>Roland Print</b></span>
+    </div>
+
+    <div class="producto">
+      <b><i>Inro</i>Costeo</b>
+      <span>IMPORTACIONES</span>
+    </div>
+
+    <nav>
+      <p class="nav-sec">COSTEAR</p>
+      <a class="nav-item activo" id="navFlujo" onclick="verFlujo()">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span class="nav-txt">Nueva OC</span>
+        <span class="chip-falta oculto" id="chipClave">falta<br>clave</span>
+      </a>
+
+      <p class="nav-sec">DÓNDE QUEDA</p>
+      <a class="nav-item inerte" id="navCarpeta" target="_blank">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span class="nav-txt">Carpeta en Drive</span>
+      </a>
+      <a class="nav-item inerte" id="navHoja" target="_blank">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>
+        <span class="nav-txt">Hoja de costeo</span>
+      </a>
+
+      <p class="nav-sec">CÓMO FUNCIONA</p>
+      <a class="nav-item" id="navRecorrido" onclick="verRecorrido()">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.8-.9 1.4v.3"/><path d="M12 17h.01"/></svg>
+        <span class="nav-txt">El recorrido</span>
+      </a>
+    </nav>
+
+    <div class="pie">
+      <button class="clave sin" id="btnClave" onclick="abrirPanel()">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M17 6l2 2M14 9l2 2"/></svg>
+        <span>
+          <b>Clave IA</b>
+          <em id="claveEstado">sin configurar</em>
+        </span>
+      </button>
+      <p class="mail" id="usuarioMail"></p>
+    </div>
+  </aside>
+
+  <!-- ══════════ CONTENIDO ══════════ -->
+  <main>
+    <div class="encabezado">
+      <h1 id="tituloVista">Costeo de importaciones</h1>
+      <p id="bajadaVista">Se escanea la carpeta, se lee cada documento, y recién entonces se arma la hoja.</p>
+    </div>
+
+    <div class="lienzo">
+
+      <div class="pasos" id="pasos">
+        <span id="p1">1 · CARPETA</span><i></i>
+        <span id="p2">2 · PROCESAR</span><i></i>
+        <span id="p3">3 · COSTEO</span>
+      </div>
+
+      <!-- ── FASE 1 ── -->
+      <section id="faseCarpeta" class="rise">
+        <div class="hoja" id="cardZona">
+          <div class="zona">
+            <div class="icono">
+              <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </div>
+            <h3>Pega el enlace de la carpeta de la OC</h3>
+            <p>Ahí deben estar la factura del proveedor, la DUA y los comprobantes de gastos.</p>
+            <div class="fila">
+              <input type="text" id="inputCarpeta" placeholder="https://drive.google.com/drive/folders/...">
+              <button id="btnEscanear" class="btn btn-principal" onclick="escanear()">Escanear carpeta</button>
+            </div>
+            <p class="nota">Solo se leen los documentos. No se escribe nada en tu Drive hasta que generes la hoja.</p>
+          </div>
+          <div id="msgCarpeta"></div>
+        </div>
+
+        <!-- Una vez escaneada, la carpeta se repliega: lo que importa pasa a ser la lista -->
+        <div id="cardCarpeta" class="hoja resumen oculto">
+          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <div class="resumen-txt">
+            <b id="resNombre"></b>
+            <span id="resDetalle"></span>
+          </div>
+          <button class="btn btn-suave btn-sm" onclick="cambiarCarpeta()">Cambiar carpeta</button>
+        </div>
+
+        <div id="cardDocs" class="hoja oculto">
+          <h2>Qué se va a procesar</h2>
+          <p class="sub" id="subDocs"></p>
+
+          <label for="inputOC">Nombre / N° de la OC</label>
+          <input type="text" id="inputOC" placeholder="Ej: OC-2025-0142" style="max-width:340px">
+
+          <ul class="docs" id="listaDocs" style="margin-top:18px"></ul>
+
+          <div class="acciones">
+            <button id="btnProcesar" class="btn btn-principal" onclick="procesar()">Procesar con Gemini</button>
+            <button class="btn btn-suave" onclick="reiniciar()">Limpiar</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── FASE 2 ── -->
+      <section id="faseProceso" class="oculto">
+        <div class="hoja">
+          <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start;">
+            <div style="min-width:0; flex:1;">
+              <h2 id="progresoTitulo">Procesando…</h2>
+              <p class="sub" id="progresoActual" style="margin:0;"></p>
+            </div>
+            <button class="btn btn-alerta btn-sm" onclick="cancelar()">Cancelar</button>
+          </div>
+          <div class="barra"><div id="barraFill" style="width:0%"></div></div>
+          <p class="sub" id="notaPausa" style="margin:12px 0 0;"></p>
+        </div>
+      </section>
+
+      <!-- ── FASE 3 ── -->
+      <section id="faseResultado" class="oculto">
+        <div class="hoja">
+          <h2>Qué reconoció en cada documento</h2>
+          <p class="sub">Los irrelevantes se descartan solos; los que dieron error no entran al costeo.</p>
+          <ul class="docs" id="listaClasificacion"></ul>
+        </div>
+
+        <div class="hoja">
+          <h2>Generar el costeo</h2>
+          <p class="sub">
+            Se crea una Hoja de Cálculo en la misma carpeta de la OC, con dos pestañas:
+            <b>EXTRACCION</b>, los datos crudos y editables, y <b>COSTEO</b>, el formato del
+            área, todo formulado. Si corriges algo en EXTRACCION, COSTEO recalcula solo.
+          </p>
+          <div class="acciones">
+            <button id="btnGenerar" class="btn btn-principal" onclick="generar()">Generar hoja de costeo</button>
+            <button class="btn btn-suave" onclick="reiniciar()">Nueva OC</button>
+          </div>
+          <div id="msgCosteo"></div>
+        </div>
+      </section>
+
+      <!-- ── EL RECORRIDO ── -->
+      <section id="vistaRecorrido" class="oculto">
+        <div class="hoja">
+          <ol class="recorrido">
+            <li>
+              <b>Pegas el enlace de la carpeta</b>
+              <span>Se listan los PDFs e imágenes. Los que por su nombre no aportan al costeo
+              —swift, packing list, cotizaciones— vienen desmarcados, y podés marcarlos igual.</span>
+            </li>
+            <li>
+              <b>Cada documento se lee por separado</b>
+              <span>Gemini lo clasifica en factura comercial, DUA o gasto, y extrae los datos.
+              Entre uno y otro hay una pausa para no saturar el límite de tu clave. Podés cancelar
+              a mitad de camino: lo ya leído se conserva.</span>
+            </li>
+            <li>
+              <b>Se consolida la OC</b>
+              <span>Se unifican los productos de la factura, los tipos de cambio de la DUA y todos
+              los gastos, descartando duplicados por serie y número.</span>
+            </li>
+            <li>
+              <b>Se arma la hoja en la carpeta de la OC</b>
+              <span>EXTRACCION guarda lo que se leyó, con el semáforo de calidad; COSTEO es el
+              formato del área, enteramente en fórmulas. Se corrige en EXTRACCION y el costeo
+              se recalcula solo. Nada se sobrescribe: cada corrida deja su propia hoja con la fecha.</span>
+            </li>
+          </ol>
+          <div class="acciones">
+            <button class="btn btn-principal" onclick="verFlujo()">Empezar</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ══════════ PANEL DE LA CLAVE ══════════ -->
+<div class="velo oculto" id="velo" onclick="cerrarPanel()"></div>
+<div class="panel oculto" id="panelKey">
+  <h3>Tu clave de Gemini</h3>
   <p>
-    Cada persona usa su propia key para consumir su propio límite de
-    requests. Se guarda en tu cuenta, no en el código.
-    Consíguela en <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>.
+    Cada persona usa la suya, para consumir su propio límite de consultas por día.
+    Se guarda en tu cuenta, nunca en el código.
+    Se genera en <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>.
   </p>
   <input type="password" id="inputKey" placeholder="AIza...">
   <div class="acciones">
-    <button class="btn btn-primary btn-sm" onclick="guardarKey()">Guardar</button>
-    <button class="btn btn-ghost btn-sm" onclick="probarKey()">🔌 Probar</button>
-    <button class="btn btn-danger btn-sm" onclick="borrarKey()">Borrar</button>
+    <button class="btn btn-principal btn-sm" onclick="guardarKey()">Guardar</button>
+    <button class="btn btn-suave btn-sm" onclick="probarKey()">Probar</button>
+    <button class="btn btn-alerta btn-sm" onclick="borrarKey()">Borrar</button>
+    <button class="btn btn-suave btn-sm" onclick="cerrarPanel()">Cerrar</button>
   </div>
   <div id="msgKey"></div>
-</div>
-
-<div class="wrap">
-
-  <ol class="pasos">
-    <li id="p1"><span class="num">1</span><span>Carpeta</span></li>
-    <li><i class="guion"></i></li>
-    <li id="p2"><span class="num">2</span><span>Procesar</span></li>
-    <li><i class="guion"></i></li>
-    <li id="p3"><span class="num">3</span><span>Costeo</span></li>
-  </ol>
-
-  <!-- ══════════ FASE 1: CARPETA ══════════ -->
-  <section id="faseCarpeta" class="rise">
-    <div class="card">
-      <h2>Carpeta de la Orden de Compra</h2>
-      <p class="sub">
-        Pega el enlace de la carpeta de Drive con los documentos de la OC
-        (factura del proveedor, DUA y comprobantes de gastos).
-      </p>
-      <label for="inputCarpeta">Enlace de la carpeta</label>
-      <input type="text" id="inputCarpeta" placeholder="https://drive.google.com/drive/folders/...">
-      <div class="acciones">
-        <button id="btnEscanear" class="btn btn-primary" onclick="escanear()">Escanear carpeta</button>
-      </div>
-      <div id="msgCarpeta"></div>
-    </div>
-
-    <div id="cardDocs" class="card oculto">
-      <h2 id="tituloDocs">Documentos</h2>
-      <p class="sub" id="subDocs"></p>
-
-      <label for="inputOC">Nombre / N° de la OC</label>
-      <input type="text" id="inputOC" placeholder="Ej: OC-2025-0142">
-
-      <ul class="docs" id="listaDocs"></ul>
-
-      <div class="acciones">
-        <button id="btnProcesar" class="btn btn-primary" onclick="procesar()">Procesar con Gemini</button>
-        <button class="btn btn-ghost" onclick="reiniciar()">Limpiar</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ══════════ FASE 2: PROCESANDO ══════════ -->
-  <section id="faseProceso" class="oculto">
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start;">
-        <div style="min-width:0; flex:1;">
-          <h2 id="progresoTitulo">Procesando…</h2>
-          <p class="sub" id="progresoActual" style="margin:0;"></p>
-        </div>
-        <button class="btn btn-danger btn-sm" onclick="cancelar()">✕ Cancelar</button>
-      </div>
-      <div class="barra"><div id="barraFill" style="width:0%"></div></div>
-      <p class="sub" style="margin:10px 0 0;" id="notaPausa"></p>
-    </div>
-  </section>
-
-  <!-- ══════════ FASE 3: RESULTADO ══════════ -->
-  <section id="faseResultado" class="oculto">
-    <div class="card">
-      <h2>Clasificación de documentos</h2>
-      <p class="sub">Lo que Gemini reconoció en cada archivo.</p>
-      <ul class="docs" id="listaClasificacion"></ul>
-    </div>
-
-    <div class="card">
-      <h2>Generar el costeo</h2>
-      <p class="sub">
-        Se creará una Hoja de Cálculo en la misma carpeta de la OC, con dos
-        pestañas: <b>EXTRACCION</b> (los datos crudos, editables) y
-        <b>COSTEO</b> (el formato del área, todo formulado). Si corriges algo en
-        EXTRACCION, COSTEO recalcula solo.
-      </p>
-      <div class="acciones">
-        <button id="btnGenerar" class="btn btn-accent" onclick="generar()">Generar hoja de costeo</button>
-        <button class="btn btn-ghost" onclick="reiniciar()">Nueva OC</button>
-      </div>
-      <div id="msgCosteo"></div>
-    </div>
-  </section>
-
 </div>
 
 <?!= include('Cliente'); ?>

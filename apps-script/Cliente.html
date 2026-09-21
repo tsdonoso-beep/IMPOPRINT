@@ -14,14 +14,15 @@ var estado = {
   cancelado: false,
   pausaMs: 2500,
   maxMB: 20,
-  tieneKey: false
+  tieneKey: false,
+  fase: 1
 };
 
 var TIPO_LABEL = {
-  FACTURA_COMERCIAL: '🧾 Factura',
-  DUA: '📋 DUA',
-  GASTO: '💰 Gasto',
-  IRRELEVANTE: '⏭ Irrelevante'
+  FACTURA_COMERCIAL: 'Factura comercial',
+  DUA: 'DUA',
+  GASTO: 'Gasto',
+  IRRELEVANTE: 'Irrelevante'
 };
 
 // ---------- utilidades ----------
@@ -37,44 +38,86 @@ function esc(s) {
 
 function mostrar(id, visible) { $(id).classList.toggle('oculto', !visible); }
 
+function peso(kb) { return kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'; }
+
 function aviso(contenedor, texto, tipo) {
   $(contenedor).innerHTML = texto
     ? '<div class="aviso aviso-' + tipo + '">' + esc(texto) + '</div>'
     : '';
 }
 
+// ---------- vistas y pasos ----------
+
 function fase(n) {
+  estado.fase = n;
   mostrar('faseCarpeta', n === 1);
   mostrar('faseProceso', n === 2);
   mostrar('faseResultado', n === 3);
+  mostrar('vistaRecorrido', false);
+  mostrar('pasos', true);
+
   [1, 2, 3].forEach(function (i) {
-    var li = $('p' + i);
-    li.className = i === n ? 'paso-on' : (i < n ? 'paso-ok' : '');
-    li.querySelector('.num').textContent = i < n ? '✓' : i;
+    var s = $('p' + i);
+    s.className = i === n ? 'on' : (i < n ? 'ok' : '');
   });
+
+  $('navFlujo').classList.add('activo');
+  $('navRecorrido').classList.remove('activo');
+  $('tituloVista').textContent = 'Costeo de importaciones';
+  $('bajadaVista').textContent = 'Se escanea la carpeta, se lee cada documento, y recién entonces se arma la hoja.';
 }
 
-// ---------- API Key ----------
+function verFlujo() { fase(estado.fase); }
 
-function togglePanel() { $('panelKey').classList.toggle('oculto'); }
+function verRecorrido() {
+  ['faseCarpeta', 'faseProceso', 'faseResultado', 'pasos'].forEach(function (id) { mostrar(id, false); });
+  mostrar('vistaRecorrido', true);
+  $('navFlujo').classList.remove('activo');
+  $('navRecorrido').classList.add('activo');
+  $('tituloVista').textContent = 'El recorrido';
+  $('bajadaVista').textContent = 'Qué hace la herramienta con tus documentos, paso por paso.';
+}
+
+// Enlaces de "Dónde queda": se activan a medida que el flujo avanza.
+function activarNav(id, url, etiqueta) {
+  var a = $(id);
+  a.classList.remove('inerte');
+  a.href = url;
+  if (etiqueta) a.querySelector('.nav-txt').textContent = etiqueta;
+}
+
+// ---------- clave ----------
+
+function abrirPanel() { mostrar('panelKey', true); mostrar('velo', true); }
+function cerrarPanel() { mostrar('panelKey', false); mostrar('velo', false); }
 
 function pintarEstadoKey(d) {
   estado.tieneKey = d.tieneKey;
   estado.pausaMs = d.pausaMs || 2500;
   estado.maxMB = d.maxMB || 20;
-  $('btnKey').textContent = d.tieneKey ? '⚙ API Key · ' + d.keyMask : '⚙ API Key · sin configurar';
+
+  $('claveEstado').textContent = d.tieneKey ? d.keyMask : 'sin configurar';
+  $('btnClave').className = 'clave ' + (d.tieneKey ? 'lista' : 'sin');
+  mostrar('chipClave', !d.tieneKey);
+  $('usuarioMail').textContent = d.usuario || '';
   $('notaPausa').textContent =
-    'Pausa de ' + (estado.pausaMs / 1000).toFixed(1) + ' s entre documentos para no saturar el límite de Gemini. Puedes cancelar cuando quieras.';
+    'Pausa de ' + (estado.pausaMs / 1000).toFixed(1) + ' s entre documentos para no saturar el límite de tu clave.';
+}
+
+function cargarEstado() {
+  google.script.run.withSuccessHandler(function (json) {
+    pintarEstadoKey(JSON.parse(json));
+  }).apiEstado();
 }
 
 function guardarKey() {
   var val = $('inputKey').value.trim();
   if (!val) return;
-  if (val.indexOf('AIza') !== 0 && !confirm('La key no empieza con "AIza". ¿Guardar igual?')) return;
+  if (val.indexOf('AIza') !== 0 && !confirm('La clave no empieza con "AIza". ¿Guardar igual?')) return;
   google.script.run.withSuccessHandler(function (json) {
     var d = JSON.parse(json);
     if (!d.ok) return aviso('msgKey', d.error, 'error');
-    aviso('msgKey', 'Key guardada.', 'ok');
+    aviso('msgKey', 'Clave guardada.', 'ok');
     $('inputKey').value = '';
     cargarEstado();
   }).apiGuardarKey(val);
@@ -91,17 +134,11 @@ function probarKey() {
   aviso('msgKey', 'Probando…', 'ok');
   google.script.run.withSuccessHandler(function (json) {
     var d = JSON.parse(json);
-    aviso('msgKey', d.ok ? '✅ Conexión OK — ' + d.modelo : '❌ ' + d.error, d.ok ? 'ok' : 'error');
+    aviso('msgKey', d.ok ? 'Conexión correcta — ' + d.modelo : d.error, d.ok ? 'ok' : 'error');
   }).apiProbarKey();
 }
 
-function cargarEstado() {
-  google.script.run.withSuccessHandler(function (json) {
-    pintarEstadoKey(JSON.parse(json));
-  }).apiEstado();
-}
-
-// ---------- Fase 1: escanear la carpeta ----------
+// ---------- fase 1: escanear la carpeta ----------
 
 function escanear() {
   var url = $('inputCarpeta').value.trim();
@@ -120,11 +157,19 @@ function escanear() {
       estado.folderNombre = d.folderNombre;
       estado.archivos = d.archivos;
       aviso('msgCarpeta', '', '');
+      activarNav('navCarpeta', 'https://drive.google.com/drive/folders/' + d.folderId, d.folderNombre);
 
       if (!d.archivos.length) {
         return aviso('msgCarpeta', 'La carpeta no tiene PDFs ni imágenes para procesar.', 'error');
       }
       if (!$('inputOC').value.trim()) $('inputOC').value = d.folderNombre;
+
+      // La carpeta ya cumplió su papel: se repliega para que la lista mande.
+      $('resNombre').textContent = d.folderNombre;
+      $('resDetalle').textContent = d.archivos.length + ' documento(s) encontrados';
+      mostrar('cardZona', false);
+      mostrar('cardCarpeta', true);
+
       pintarDocs();
       mostrar('cardDocs', true);
     })
@@ -137,8 +182,8 @@ function escanear() {
 
 function pintarDocs() {
   var incluidos = estado.archivos.filter(function (a) { return a.incluido; }).length;
-  $('tituloDocs').textContent = estado.folderNombre;
-  $('subDocs').innerHTML = '<b>' + incluidos + '</b> de ' + estado.archivos.length + ' documento(s) se procesarán.';
+  $('subDocs').innerHTML = '<b>' + incluidos + '</b> de ' + estado.archivos.length +
+    ' documento(s) se procesarán. Desmarca los que no aporten al costeo.';
 
   $('listaDocs').innerHTML = estado.archivos.map(function (a, i) {
     var etiqueta = '';
@@ -149,7 +194,8 @@ function pintarDocs() {
     return '<li>' +
       '<input type="checkbox" ' + (a.incluido ? 'checked' : '') + (a.pesado ? ' disabled' : '') +
         ' onchange="alternar(' + i + ')">' +
-      '<span class="nom">' + esc(a.nombre) + ' <span class="kb">· ' + a.tamanoKB + ' KB</span></span>' +
+      '<span class="nom">' + esc(a.nombre) + '</span>' +
+      '<span class="kb">' + peso(a.tamanoKB) + '</span>' +
       etiqueta +
       '</li>';
   }).join('');
@@ -163,12 +209,19 @@ function alternar(i) {
   pintarDocs();
 }
 
-// ---------- Fase 2: extracción ----------
+function cambiarCarpeta() {
+  mostrar('cardZona', true);
+  mostrar('cardCarpeta', false);
+  mostrar('cardDocs', false);
+  $('inputCarpeta').focus();
+}
+
+// ---------- fase 2: extracción ----------
 
 function procesar() {
   if (!estado.tieneKey) {
-    togglePanel();
-    return aviso('msgKey', 'Primero configura tu Gemini API Key.', 'error');
+    abrirPanel();
+    return aviso('msgKey', 'Primero configura tu clave de Gemini.', 'error');
   }
   var pendientes = estado.archivos.filter(function (a) { return a.incluido; });
   if (!pendientes.length) return;
@@ -183,7 +236,7 @@ function siguiente(pendientes, i) {
   if (estado.cancelado || i >= pendientes.length) return finalizar();
 
   var doc = pendientes[i];
-  $('progresoTitulo').textContent = 'Procesando ' + (i + 1) + ' de ' + pendientes.length;
+  $('progresoTitulo').textContent = 'Leyendo ' + (i + 1) + ' de ' + pendientes.length;
   $('progresoActual').textContent = doc.nombre;
   $('barraFill').style.width = ((i / pendientes.length) * 100) + '%';
 
@@ -197,9 +250,7 @@ function siguiente(pendientes, i) {
     .withSuccessHandler(function (json) {
       var d = JSON.parse(json);
       estado.procesados.push({
-        id: doc.id,
-        nombre: doc.nombre,
-        incluido: true,
+        id: doc.id, nombre: doc.nombre, incluido: true,
         resultado: d.ok ? d.resultado : null,
         error: d.ok ? '' : d.error
       });
@@ -222,7 +273,7 @@ function finalizar() {
 
   $('listaClasificacion').innerHTML = estado.procesados.map(function (p) {
     var chip = p.error
-      ? '<span class="chip chip-bad">⚠ Error</span>'
+      ? '<span class="chip chip-bad">Error</span>'
       : '<span class="chip chip-neutro">' + (TIPO_LABEL[p.resultado.tipo] || p.resultado.tipo) + '</span>';
     return '<li>' + chip +
       '<span class="nom">' + esc(p.nombre) + '</span>' +
@@ -233,7 +284,7 @@ function finalizar() {
   fase(3);
 }
 
-// ---------- Fase 3: generar la hoja ----------
+// ---------- fase 3: generar la hoja ----------
 
 function generar() {
   $('btnGenerar').disabled = true;
@@ -247,12 +298,11 @@ function generar() {
       var d = JSON.parse(json);
       if (!d.ok) return aviso('msgCosteo', d.error, 'error');
 
+      activarNav('navHoja', d.url, d.nombre);
       $('msgCosteo').innerHTML =
-        '<div class="aviso aviso-ok">' +
-        '✅ <b>' + esc(d.nombre) + '</b> — ' + d.productos + ' producto(s), ' + d.gastos + ' gasto(s).<br>' +
-        'Guardada en la carpeta de la OC. ' +
-        '<a href="' + esc(d.url) + '" target="_blank"><b>Abrir la hoja →</b></a>' +
-        '</div>';
+        '<div class="aviso aviso-ok"><b>' + esc(d.nombre) + '</b> — ' +
+        d.productos + ' producto(s), ' + d.gastos + ' gasto(s). Quedó en la carpeta de la OC. ' +
+        '<a href="' + esc(d.url) + '" target="_blank"><b>Abrir la hoja</b></a></div>';
     })
     .withFailureHandler(function (err) {
       $('btnGenerar').disabled = false;
@@ -273,6 +323,8 @@ function reiniciar() {
   aviso('msgCarpeta', '', '');
   aviso('msgCosteo', '', '');
   mostrar('cardDocs', false);
+  mostrar('cardCarpeta', false);
+  mostrar('cardZona', true);
   fase(1);
 }
 
