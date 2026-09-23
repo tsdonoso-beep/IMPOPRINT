@@ -22,6 +22,16 @@ function endpointGemini(modelo, apiKey) {
     modelo + ':generateContent?key=' + encodeURIComponent(apiKey);
 }
 
+// finishReason distinto de STOP explica por qué la respuesta puede venir
+// vacía o cortada, en vez de dejar que el documento caiga como IRRELEVANTE
+// sin explicación.
+var MOTIVOS_FINISH = {
+  SAFETY: 'Gemini bloqueó el documento por su filtro de seguridad.',
+  RECITATION: 'Gemini bloqueó la respuesta (coincide con contenido protegido).',
+  MAX_TOKENS: 'La respuesta se cortó por exceder el límite de tokens (factura con demasiados productos).',
+  OTHER: 'Gemini no completó la respuesta por un motivo no especificado.'
+};
+
 // La key vive por usuario, del lado del servidor: nunca viaja al navegador.
 function obtenerApiKey() {
   return PropertiesService.getUserProperties().getProperty(PROP_KEY) || '';
@@ -58,6 +68,7 @@ function extraerDocumento(nombre, base64, mimeType, apiKey) {
 
   var url = endpointGemini(GEMINI_MODELO, apiKey);
   var respText = '';
+  var finishReason = '';
 
   // Reintentos ante 429/503. La espera crece entre intentos: cuando Gemini
   // está sin capacidad, volver a golpear a los 8 segundos suele fallar otra vez.
@@ -81,15 +92,25 @@ function extraerDocumento(nombre, base64, mimeType, apiKey) {
     }
     try {
       var json = JSON.parse(text);
-      respText = (((json.candidates || [])[0] || {}).content || {}).parts || [];
-      respText = (respText[0] || {}).text || '';
+      var candidato = (json.candidates || [])[0] || {};
+      finishReason = candidato.finishReason || '';
+      var partes = (candidato.content || {}).parts || [];
+      respText = (partes[0] || {}).text || '';
     } catch (e) {
       respText = '';
     }
     break;
   }
 
-  return { resultado: parsearRespuestaMaestra(respText), raw: respText };
+  var resultado = parsearRespuestaMaestra(respText);
+  // Motivo específico (bloqueo, corte por tokens...) cuando la lectura falló
+  // y Gemini dejó una pista en finishReason; si no hay pista, se queda el
+  // motivo genérico de parsearRespuestaMaestra.
+  if (resultado.tipo === 'ERROR_LECTURA' && MOTIVOS_FINISH[finishReason]) {
+    resultado.motivo = MOTIVOS_FINISH[finishReason];
+  }
+
+  return { resultado: resultado, raw: respText };
 }
 
 // Prueba de conexión con la key guardada.

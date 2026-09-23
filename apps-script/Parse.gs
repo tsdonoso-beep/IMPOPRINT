@@ -107,7 +107,11 @@ function parsearRespuestaMaestra(texto) {
 
     return { tipo: 'IRRELEVANTE' };
   } catch (e) {
-    return { tipo: 'IRRELEVANTE' };
+    // JSON inválido o incompleto (respuesta vacía, bloqueada o cortada por el
+    // límite de tokens): NO es lo mismo que "el documento es irrelevante".
+    // Se distingue para que el documento se pueda reintentar en vez de
+    // perderse silenciosamente como IRRELEVANTE.
+    return { tipo: 'ERROR_LECTURA', motivo: 'La respuesta de Gemini no es JSON válido o quedó incompleta.' };
   }
 }
 

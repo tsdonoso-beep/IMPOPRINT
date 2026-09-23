@@ -45,22 +45,19 @@ function consolidar(docs, nombreOC) {
     oc_titulo: ''
   };
 
+  var facturas = []; // una entrada por documento FACTURA_COMERCIAL incluido
+
   for (var i = 0; i < docs.length; i++) {
     var doc = docs[i];
     if (!doc || !doc.incluido || !doc.resultado) continue;
     var r = doc.resultado;
 
     if (r.tipo === 'FACTURA_COMERCIAL') {
-      var nProds = (r.productos || []).length;
-      var nActual = datos.productos.length;
-      var totalNuevo = r.total_exw || 0;
-      var totalActual = datos.factura.total_exw || 0;
-      // Acepta la factura si aporta más productos o mayor total EXW.
-      if (nProds > nActual || totalNuevo > totalActual) {
-        datos.factura = r.factura || facturaVacia();
-        datos.productos = r.productos || [];
-        if (datos.factura.proyecto) datos.proyecto = datos.factura.proyecto;
-      }
+      facturas.push({
+        factura: r.factura || facturaVacia(),
+        productos: r.productos || [],
+        total_exw: r.total_exw || 0
+      });
     } else if (r.tipo === 'DUA') {
       if (!datos.dua.numero && r.dua && r.dua.numero) {
         datos.dua = r.dua;
@@ -76,6 +73,8 @@ function consolidar(docs, nombreOC) {
     }
   }
 
+  aplicarFacturas(datos, facturas);
+
   datos.gastos = deduplicarGastos(datos.gastos);
 
   // No perder los montos que Gemini extrajo de la DUA: se convierten en filas
@@ -84,6 +83,44 @@ function consolidar(docs, nombreOC) {
 
   datos.tc_eur = datos.tc_eur_gemini;
   return datos;
+}
+
+// Agrupa las facturas comerciales leídas por número de factura: mismo número
+// = el mismo documento escaneado más de una vez (se queda la lectura con más
+// productos o mayor total EXW, se descarta la otra). Número distinto se
+// trata como facturas reales separadas (embarques o proveedores distintos) y
+// se SUMAN sus productos, en vez de perder los de todas menos una. Las que no
+// traen número van a un único grupo aparte — como antes de esta corrección —
+// porque sin número no hay forma de saber si son la misma factura repetida.
+function aplicarFacturas(datos, facturas) {
+  if (!facturas.length) return;
+
+  var grupos = {};
+  var orden = [];
+  facturas.forEach(function (item) {
+    var numero = String((item.factura && item.factura.numero_factura) || '').trim().toUpperCase();
+    var clave = numero || '__sin_numero__';
+    if (!grupos[clave]) orden.push(clave);
+    var actual = grupos[clave];
+    if (!actual || item.productos.length > actual.productos.length || item.total_exw > actual.total_exw) {
+      grupos[clave] = item;
+    }
+  });
+
+  // Los metadatos de cabecera (proveedor, moneda, incoterm...) son los de la
+  // factura con más productos; el resto de facturas solo aporta sus líneas.
+  var principal = orden.reduce(function (mejor, clave) {
+    var item = grupos[clave];
+    if (!mejor) return item;
+    return (item.productos.length > mejor.productos.length || item.total_exw > mejor.total_exw) ? item : mejor;
+  }, null);
+
+  datos.factura = principal.factura;
+  if (datos.factura.proyecto) datos.proyecto = datos.factura.proyecto;
+
+  datos.productos = orden.reduce(function (acum, clave) {
+    return acum.concat(grupos[clave].productos);
+  }, []);
 }
 
 // Deriva filas de gasto desde los campos de la DUA (flete, seguro, tributos).

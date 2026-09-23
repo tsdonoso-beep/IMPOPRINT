@@ -93,6 +93,7 @@ compara el resultado de la app contra el costeo conocido.
 | `Prompt.gs` | Prompt maestro de clasificación y extracción |
 | `Parse.gs` | Normaliza la respuesta de Gemini |
 | `Consolidar.gs` | Filtro por nombre y consolidación de la OC |
+| `Costeo.gs` | Cálculo del costeo para la previsualización en pantalla |
 | `Hoja.gs` | Escritor bufferizado + las hojas EXTRACCION y COSTEO |
 | `Config.gs` | Modelo, filtros por nombre, paleta y formatos |
 | `Index/Estilos/Cliente.html` | Interfaz y orquestación del navegador |

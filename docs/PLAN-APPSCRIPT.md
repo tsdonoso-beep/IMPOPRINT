@@ -253,8 +253,10 @@ las referencias `EXTRACCION!$B$5` funcionan igual en Sheets. El panel de alertas
    `application/vnd.google-apps.*`) y por prefijo `COSTEO `.
 6. **Orden de `getFiles()` no garantizado** → ordenar por nombre para que el
    proceso sea determinista.
-7. **Subcarpetas**: v1 solo el nivel raíz de la carpeta (recursivo es trivial de
-   agregar después si aparece el caso).
+7. ~~**Subcarpetas**: v1 solo el nivel raíz de la carpeta~~ **RESUELTO:**
+   `Drive.gs` recorre subcarpetas de forma recursiva hasta `MAX_NIVELES`,
+   con tope `MAX_ARCHIVOS` y protección contra atajos circulares. Cubierto
+   por `apps-script/test/carpetas.js`.
 
 ---
 

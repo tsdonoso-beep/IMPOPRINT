@@ -83,6 +83,13 @@ function apiProcesarDoc(fileId, nombre) {
     var base64 = Utilities.base64Encode(archivo.getBlob().getBytes());
     var salida = extraerDocumento(nombre, base64, archivo.getMimeType(), key);
 
+    // ERROR_LECTURA no es "documento irrelevante": es una lectura que falló
+    // (bloqueo, corte por tokens, JSON incompleto). Se trata como error para
+    // que caiga en "Reintentar fallidos" en vez de perderse como IRRELEVANTE.
+    if (salida.resultado.tipo === 'ERROR_LECTURA') {
+      return respuesta({ ok: false, error: salida.resultado.motivo || 'No se pudo leer el documento.' });
+    }
+
     return respuesta({
       ok: true,
       tipo: salida.resultado.tipo,
